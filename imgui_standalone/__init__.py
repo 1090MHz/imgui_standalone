@@ -2,7 +2,7 @@
 
 from imgui.integrations.pygame import PygameRenderer
 
-from OpenGL.GL import glClearColor, glClear, GL_COLOR_BUFFER_BIT
+from OpenGL.GL import glClearColor, glClear, GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT
 
 from pygame import Rect, OPENGL, DOUBLEBUF, NOFRAME, QUIT, MOUSEBUTTONUP, MOUSEBUTTONDOWN, MOUSEMOTION, SHOWN, HIDDEN
 
@@ -102,6 +102,8 @@ class ImGuiStandalone:
     def loop(self, main_func: Callable, on_close: Callable=None) -> None:
         """Main loop."""
         moving = False
+        initial_mouse_pos = None
+        initial_window_pos = None
 
         while True:
             for event in pg_events():
@@ -110,29 +112,33 @@ class ImGuiStandalone:
 
                 if event.type == MOUSEBUTTONDOWN:
                     moving = True
+                    mx, my = get_pos()
+                    window = getActiveWindow()
+                    initial_mouse_pos = mx, my
 
                 elif event.type == MOUSEMOTION:
-                    mx, my = get_pos()
-
-                    if moving and Rect(mx, my, 16, 16).colliderect(self._window_header_rect):
-                        getActiveWindow().move(mx - 10, my - 5)
+                    if moving:
+                        mx, my = get_pos()
+                        if initial_mouse_pos:
+                            dx, dy = mx - initial_mouse_pos[0], my - initial_mouse_pos[1]
+                            window = getActiveWindow()
+                            window.move(dx, dy)
 
                 elif event.type == MOUSEBUTTONUP:
                     moving = False
+                    initial_mouse_pos = None
 
                 self._pg_render.process_event(event)
 
             self._pg_render.process_inputs()
 
-            if self.show_hide_key != None:
+            if self.show_hide_key is not None:
                 if self.hidden and ImGuiStandaloneUtilities.pressed_global(self.show_hide_key):
                     self.show()
-
                     sleep(.2)
 
                 elif not self.hidden and ImGuiStandaloneUtilities.pressed_global(self.show_hide_key):
                     self.hide()
-
                     sleep(.2)
 
             new_frame()
@@ -147,25 +153,23 @@ class ImGuiStandalone:
             if not stay_open:
                 if on_close:
                     on_close()
-
                 self.close()
 
             set_window_size(*self._imgui_io.display_size)
-
             set_window_position(0, 0)
 
             main_func()
 
             end()
 
+            # Ensure the rendering context is properly cleared
             glClearColor(*self.background_color, 1)
-
-            glClear(GL_COLOR_BUFFER_BIT)
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
             imgui_render()
-
             self._pg_render.render(get_draw_data())
 
+            # Swap buffers to display the rendered frame
             flip()
 
     def show(self) -> None:
